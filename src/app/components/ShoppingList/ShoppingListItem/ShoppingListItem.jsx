@@ -15,6 +15,9 @@ export default function ShoppingListItem({ item, onToggle, onRemove }) {
 							item.completed ? "line-through text-gray-500" : "text-gray-900"
 						}`}>
 						{item.name} x {item.quantity}
+						{item.category && (
+							<span className='ml-2 text-gray-500'>({item.category})</span>
+						)}
 					</span>
 				</div>
 				<button

@@ -9,7 +9,21 @@ export default function ShoppingList({ list, onDelete }) {
 	const [items, setItems] = useState([]);
 	const [newItem, setNewItem] = useState("");
 	const [quantity, setQuantity] = useState(0);
+	const [category, setCategory] = useState("");
+	const [sortBy, setSortBy] = useState("");
 	const [error, setError] = useState("");
+
+	const markAsCompleted = async (listId) => {
+		try {
+			const listRef = doc(db, "shoppingLists", listId);
+			await updateDoc(listRef, {
+				completed: true,
+			});
+		} catch (error) {
+			console.error("Error marking list as completed:", error);
+			setError("Failed to mark list as completed. Please try again.");
+		}
+	};
 
 	useEffect(() => {
 		if (list && Array.isArray(list.items)) {
@@ -30,6 +44,7 @@ export default function ShoppingList({ list, onDelete }) {
 					name: newItem.trim(),
 					completed: false,
 					quantity: quantity,
+					category: category,
 					user: auth.currentUser.email,
 				};
 				await updateDoc(listRef, {
@@ -38,6 +53,7 @@ export default function ShoppingList({ list, onDelete }) {
 				setItems([...items, newItemObject]);
 				setNewItem("");
 				setQuantity(0);
+				setCategory("");
 			} catch (error) {
 				console.error("Error adding item:", error);
 				setError("Failed to add item. Please try again.");
@@ -58,6 +74,17 @@ export default function ShoppingList({ list, onDelete }) {
 		}
 	};
 
+	const sortItems = (itemsToSort) => {
+		if (sortBy === "category") {
+			return [...itemsToSort].sort((a, b) => {
+				if (a.category < b.category) return -1;
+				if (a.category > b.category) return 1;
+				return 0;
+			});
+		}
+		return itemsToSort;
+	};
+
 	const toggleItem = async (item) => {
 		try {
 			const updatedItems = items.map((i) =>
@@ -70,12 +97,13 @@ export default function ShoppingList({ list, onDelete }) {
 			const reorderedItems = [...uncompletedItems, ...completedItems];
 
 			// Update local state
-			setItems(reorderedItems);
+			const sortedItems = sortItems(reorderedItems);
+			setItems(sortedItems);
 
 			// Update Firestore
 			const listRef = doc(db, "shoppingLists", list.id);
 			await updateDoc(listRef, {
-				items: reorderedItems,
+				items: sortedItems,
 			});
 		} catch (err) {
 			console.error("Error toggling item:", err);
@@ -83,8 +111,14 @@ export default function ShoppingList({ list, onDelete }) {
 		}
 	};
 
+	const handleSortChange = (e) => {
+		setSortBy(e.target.value);
+		const sortedItems = sortItems(items);
+		setItems(sortedItems);
+	};
+
 	return (
-		<div className='bg-white shadow overflow-hidden sm:rounded-lg mb-6'>
+		<div className='bg-white shadow overflow-hidden sm:rounded-lg mb-6 mt-5'>
 			<div className='px-4 py-5 sm:px-6 flex justify-between items-center'>
 				<Link href={`/List/${list.id}`}>
 					<h2 className='text-lg leading-6 font-medium text-gray-900 cursor-pointer hover:text-indigo-600'>
@@ -95,11 +129,18 @@ export default function ShoppingList({ list, onDelete }) {
 						})}
 					</h2>
 				</Link>
-				<button
-					onClick={onDelete}
-					className='ml-2 inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'>
-					Delete List
-				</button>
+				<div className='flex'>
+					<button
+						onClick={() => markAsCompleted(list.id)}
+						className='ml-2 inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'>
+						Mark as Completed
+					</button>
+					<button
+						onClick={onDelete}
+						className='ml-2 inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'>
+						Delete List
+					</button>
+				</div>
 			</div>
 			<div className='border-t border-gray-200 px-4 py-5 sm:p-0'>
 				<form
@@ -121,6 +162,25 @@ export default function ShoppingList({ list, onDelete }) {
 							placeholder='Quantity'
 							className='ml-3 p-2 text-black shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-1/4 sm:text-sm border-gray-300 rounded-md'
 						/>
+						<select
+							value={category}
+							onChange={(e) => setCategory(e.target.value)}
+							className='ml-3 p-2 text-black shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-1/4 sm:text-sm border-gray-300 rounded-md'>
+							<option value=''>Select Category</option>
+							<option value='Frozen'>Frozen</option>
+							<option value='Fresh'>Fresh</option>
+							<option value='Meat'>Meat</option>
+							<option value='Veg'>Veg</option>
+							<option value='Fruit'>Fruit</option>
+							<option value='Other'>Other</option>
+						</select>
+						<select
+							value={sortBy}
+							onChange={handleSortChange}
+							className='ml-3 p-2 text-black shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-1/4 sm:text-sm border-gray-300 rounded-md'>
+							<option value=''>Sort By</option>
+							<option value='category'>Category</option>
+						</select>
 						<button
 							type='submit'
 							className='ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'>
@@ -129,16 +189,48 @@ export default function ShoppingList({ list, onDelete }) {
 					</div>
 				</form>
 				{error && <p className='text-red-500 mt-2'>{error}</p>}
-				<ul className='divide-y divide-gray-200'>
-					{items.map((item, index) => (
-						<ShoppingListItem
-							key={index}
-							item={item}
-							onToggle={() => toggleItem(item)}
-							onRemove={() => removeItem(item)}
-						/>
-					))}
-				</ul>
+				{sortBy === "category" ? (
+					Object.entries(
+						items.reduce((acc, item) => {
+							acc[item.category] = acc[item.category] || [];
+							acc[item.category].push(item);
+							return acc;
+						}, {})
+					)
+						.sort((a, b) => {
+							if (a[0] < b[0]) return -1;
+							if (a[0] > b[0]) return 1;
+							return 0;
+						})
+						.map(([category, items]) => (
+							<div key={category}>
+								<h3 className='px-6 py-3 font-semibold text-gray-700'>
+									{category}
+								</h3>
+								<ul className='divide-y divide-gray-200'>
+									{items.map((item, index) => (
+										<ShoppingListItem
+											key={index}
+											item={item}
+											onToggle={() => toggleItem(item)}
+											onRemove={() => removeItem(item)}
+										/>
+									))}
+								</ul>
+							</div>
+						))
+				) : (
+					<ul className='divide-y divide-gray-200'>
+						{sortItems(items).map((item, index) => (
+							<ShoppingListItem
+								key={index}
+								item={item}
+								onToggle={() => toggleItem(item)}
+								onRemove={() => removeItem(item)}
+							/>
+						))}
+					</ul>
+				)}
 			</div>
 		</div>
 	);
