@@ -32,9 +32,7 @@ const Navbar = () => {
 									Back
 								</button>
 							)}
-							<h1 className='text-xl font-semibold text-black'>
-								Shopping List App
-							</h1>
+							<h1 className='text-xl font-semibold text-black'>Holme Shop</h1>
 						</div>
 						<div className='hidden sm:flex flex-start items-center'>
 							<span className='text-gray-700 mr-4'>{user?.email}</span>
