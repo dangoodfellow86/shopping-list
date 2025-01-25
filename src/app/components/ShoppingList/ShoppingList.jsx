@@ -1,17 +1,18 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import React, { useState } from "react";
+import useShoppingList from "../../hooks/useShoppingList";
+import useSortItems from "../../hooks/useSortItems";
 import ShoppingListItem from "./ShoppingListItem/ShoppingListItem";
 import Link from "next/link";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../../firebase";
+import AddItemModal from "./AddItemModal/AddItemModal";
 
 export default function ShoppingList({ list, onDelete }) {
-	const [items, setItems] = useState([]);
-	const [newItem, setNewItem] = useState("");
-	const [quantity, setQuantity] = useState(0);
-	const [category, setCategory] = useState("");
-	const [sortBy, setSortBy] = useState("");
-	const [error, setError] = useState("");
+	const [isModalOpen, setIsModalOpen] = useState(false);
+	const { items, error, addItem, removeItem, toggleItem } =
+		useShoppingList(list);
+	const { sortBy, setSortBy, sortedItems } = useSortItems(items);
 
 	const markAsCompleted = async (listId) => {
 		try {
@@ -21,101 +22,20 @@ export default function ShoppingList({ list, onDelete }) {
 			});
 		} catch (error) {
 			console.error("Error marking list as completed:", error);
-			setError("Failed to mark list as completed. Please try again.");
 		}
 	};
 
-	useEffect(() => {
-		if (list && Array.isArray(list.items)) {
-			setItems(list.items);
-		}
-	}, [list]);
-
-	if (!list || !list.id) {
-		return <div>Loading list...</div>;
-	}
-
-	const addItem = async (e) => {
-		e.preventDefault();
-		if (newItem.trim()) {
-			const listRef = doc(db, "shoppingLists", list.id);
-			try {
-				const newItemObject = {
-					name: newItem.trim(),
-					completed: false,
-					quantity: quantity,
-					category: category,
-					user: auth.currentUser.email,
-				};
-				await updateDoc(listRef, {
-					items: arrayUnion(newItemObject),
-				});
-				setItems([...items, newItemObject]);
-				setNewItem("");
-				setQuantity(0);
-				setCategory("");
-			} catch (error) {
-				console.error("Error adding item:", error);
-				setError("Failed to add item. Please try again.");
-			}
-		}
-	};
-
-	const removeItem = async (item) => {
-		try {
-			const listRef = doc(db, "shoppingLists", list.id);
-			await updateDoc(listRef, {
-				items: arrayRemove(item),
-			});
-			setItems(items.filter((i) => i.name !== item.name));
-		} catch (error) {
-			console.error("Error removing item:", error);
-			setError("Failed to remove item. Please try again.");
-		}
-	};
-
-	const sortItems = (itemsToSort) => {
-		if (sortBy === "category") {
-			return [...itemsToSort].sort((a, b) => {
-				if (a.category < b.category) return -1;
-				if (a.category > b.category) return 1;
-				return 0;
-			});
-		}
-		return itemsToSort;
-	};
-
-	const toggleItem = async (item) => {
-		try {
-			const updatedItems = items.map((i) =>
-				i.name === item.name ? { ...i, completed: !i.completed } : i
-			);
-
-			// Reorder items: uncompleted items first, then completed items
-			const uncompletedItems = updatedItems.filter((i) => !i.completed);
-			const completedItems = updatedItems.filter((i) => i.completed);
-			const reorderedItems = [...uncompletedItems, ...completedItems];
-
-			// Update local state
-			const sortedItems = sortItems(reorderedItems);
-			setItems(sortedItems);
-
-			// Update Firestore
-			const listRef = doc(db, "shoppingLists", list.id);
-			await updateDoc(listRef, {
-				items: sortedItems,
-			});
-		} catch (err) {
-			console.error("Error toggling item:", err);
-			setError("Failed to update item. Please try again.");
-		}
+	const handleAddItem = async (newItem, quantity, category) => {
+		const success = await addItem(newItem, quantity, category);
 	};
 
 	const handleSortChange = (e) => {
 		setSortBy(e.target.value);
-		const sortedItems = sortItems(items);
-		setItems(sortedItems);
 	};
+
+	if (!list || !list.id) {
+		return <div>Loading list...</div>;
+	}
 
 	return (
 		<div className='bg-white shadow overflow-hidden sm:rounded-lg mb-6 mt-5'>
@@ -143,55 +63,20 @@ export default function ShoppingList({ list, onDelete }) {
 				</div>
 			</div>
 			<div className='border-t border-gray-200 px-4 py-5 sm:p-0'>
-				<form
-					onSubmit={addItem}
-					className='sm:px-6 sm:py-5 border-b border-gray-200'>
-					<div className='flex'>
-						<input
-							type='text'
-							value={newItem}
-							onChange={(e) => setNewItem(e.target.value)}
-							placeholder='Add new item'
-							className='flex-grow text-black shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-2/4 sm:text-sm border-gray-300 rounded-md p-2'
-						/>
-						<p className='text-black text-right pt-2 w-1/4'>Amount: </p>
-						<input
-							type='number'
-							value={quantity}
-							onChange={(e) => setQuantity(e.target.value)}
-							placeholder='Quantity'
-							className='ml-3 p-2 text-black shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-1/4 sm:text-sm border-gray-300 rounded-md'
-						/>
-						<select
-							value={category}
-							onChange={(e) => setCategory(e.target.value)}
-							className='ml-3 p-2 text-black shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-1/4 sm:text-sm border-gray-300 rounded-md'>
-							<option value=''>Select Category</option>
-							<option value='Frozen'>Frozen</option>
-							<option value='Fresh'>Fresh</option>
-							<option value='Meat'>Meat</option>
-							<option value='Veg'>Veg</option>
-							<option value='Fruit'>Fruit</option>
-							<option value='Other'>Other</option>
-						</select>
-						<select
-							value={sortBy}
-							onChange={handleSortChange}
-							className='ml-3 p-2 text-black shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-1/4 sm:text-sm border-gray-300 rounded-md'>
-							<option value=''>Sort By</option>
-							<option value='category'>Category</option>
-						</select>
-						<button
-							type='submit'
-							className='ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'>
-							Add
-						</button>
-					</div>
-				</form>
+				<button
+					onClick={() => setIsModalOpen(true)}
+					className='ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'>
+					Add Item
+				</button>
+				<AddItemModal
+					isOpen={isModalOpen}
+					onClose={() => setIsModalOpen(false)}
+					onAddItem={handleAddItem}
+				/>
 				{error && <p className='text-red-500 mt-2'>{error}</p>}
 				{sortBy === "category" ? (
 					Object.entries(
-						items.reduce((acc, item) => {
+						sortedItems.reduce((acc, item) => {
 							acc[item.category] = acc[item.category] || [];
 							acc[item.category].push(item);
 							return acc;
@@ -221,7 +106,7 @@ export default function ShoppingList({ list, onDelete }) {
 						))
 				) : (
 					<ul className='divide-y divide-gray-200'>
-						{sortItems(items).map((item, index) => (
+						{sortedItems.map((item, index) => (
 							<ShoppingListItem
 								key={index}
 								item={item}

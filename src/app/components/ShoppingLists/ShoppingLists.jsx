@@ -1,35 +1,14 @@
 "use client";
-import { useState, useEffect } from "react";
-import {
-	collection,
-	query,
-	where,
-	onSnapshot,
-	addDoc,
-	deleteDoc,
-	doc,
-} from "firebase/firestore";
+import { addDoc, deleteDoc, doc, collection } from "firebase/firestore";
 import { db } from "../../firebase";
+import useShoppingLists from "../../hooks/useShoppingLists";
+import useFilterLists from "../../hooks/useFilterLists";
 import ShoppingList from "../ShoppingList/ShoppingList";
 import CreateListForm from "../CreateList/CreateListForm/CreateListForm";
-import Link from "next/link";
 
 export default function ShoppingLists({ user }) {
-	const [lists, setLists] = useState([]);
-	const [activeTab, setActiveTab] = useState("open");
-
-	useEffect(() => {
-		const q = query(collection(db, "shoppingLists"));
-		const unsubscribe = onSnapshot(q, (querySnapshot) => {
-			const listsData = querySnapshot.docs.map((doc) => ({
-				id: doc.id,
-				...doc.data(),
-			}));
-			setLists(listsData);
-		});
-
-		return () => unsubscribe();
-	}, [user]);
+	const { lists } = useShoppingLists(user);
+	const { activeTab, setActiveTab, filteredLists } = useFilterLists(lists);
 
 	const createList = async (name) => {
 		await addDoc(collection(db, "shoppingLists"), {
@@ -82,34 +61,30 @@ export default function ShoppingLists({ user }) {
 				<>
 					{activeTab === "open" && (
 						<div>
-							{lists
-								.filter((list) => !list.completed)
-								.map((list) => (
-									<div
-										className='cursor-pointer'
-										key={list.id}>
-										<ShoppingList
-											list={list}
-											onDelete={() => deleteList(list.id)}
-										/>
-									</div>
-								))}
+							{filteredLists.map((list) => (
+								<div
+									className='cursor-pointer'
+									key={list.id}>
+									<ShoppingList
+										list={list}
+										onDelete={() => deleteList(list.id)}
+									/>
+								</div>
+							))}
 						</div>
 					)}
 					{activeTab === "completed" && (
 						<div>
-							{lists
-								.filter((list) => list.completed)
-								.map((list) => (
-									<div
-										className='cursor-pointer'
-										key={list.id}>
-										<ShoppingList
-											list={list}
-											onDelete={() => deleteList(list.id)}
-										/>
-									</div>
-								))}
+							{filteredLists.map((list) => (
+								<div
+									className='cursor-pointer'
+									key={list.id}>
+									<ShoppingList
+										list={list}
+										onDelete={() => deleteList(list.id)}
+									/>
+								</div>
+							))}
 						</div>
 					)}
 				</>
